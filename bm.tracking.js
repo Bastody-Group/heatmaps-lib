@@ -19,12 +19,6 @@ function detectMainContents() {
 const DEVICE_BREAKPOINTS = { phone: 560, tablet: 1080 };
 const DEVICE_WIDTHS = { phone: '390px', tablet: '768px', desktop: '' };
 
-function isLocalEnvironment() {
-  if (window.BM_ALLOW_LOCAL_SUBMIT) return false;
-  const { protocol, hostname } = window.location;
-  return protocol === 'file:' || hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '' || hostname === '[::1]';
-}
-
 function classifyDevice(width) {
   if (!width) return null;
   if (width < DEVICE_BREAKPOINTS.phone) return 'phone';
@@ -185,11 +179,6 @@ class ClickScrollTracker {
 
   submit() {
     if (this.submitted) return Promise.resolve({ success: false, reason: 'already-submitted' });
-
-    if (isLocalEnvironment()) {
-      console.warn('ClickScrollTracker: local environment detected, submit() skipped');
-      return Promise.resolve({ success: false, reason: 'local-environment' });
-    }
 
     if (!this.endpoint) {
       console.warn('ClickScrollTracker: no endpoint configured, submit() skipped');
