@@ -1,4 +1,4 @@
-const BM_TRACKING_VERSION = '2.9.5';
+const BM_TRACKING_VERSION = '2.9.6';
 
 const BM_TRACKING_ENDPOINT = 'https://siwvatcsucacrugbqmhh.supabase.co/functions/v1/heatmap-track';
 
@@ -355,6 +355,15 @@ class HeatmapOverlay {
       });
       this.resizeObserver.observe(this.container);
     }
+
+    let mutationRenderTimeout = null;
+    this.mutationObserver = new MutationObserver((mutations) => {
+      const isOwnOverlayChange = mutations.every(m => this.overlayRoot.contains(m.target));
+      if (isOwnOverlayChange) return;
+      clearTimeout(mutationRenderTimeout);
+      mutationRenderTimeout = setTimeout(() => this.render(), 100);
+    });
+    this.mutationObserver.observe(this.container, { childList: true, subtree: true, attributes: true });
 
     this.buildTooltip();
     this.container.addEventListener('mousemove', (event) => this.handleHover(event));
