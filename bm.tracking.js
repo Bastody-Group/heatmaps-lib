@@ -371,6 +371,7 @@ class HeatmapOverlay {
       const isRelevant = mutations.some(m => {
         if (this.overlayRoot.contains(m.target)) return false;
         if (m.type === 'attributes' && m.attributeName === 'style') return false;
+        if (m.target instanceof Element && m.target.closest('.swiper')) return false;
         return true;
       });
       if (!isRelevant) return;
