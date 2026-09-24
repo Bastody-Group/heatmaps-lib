@@ -1,4 +1,4 @@
-const BM_TRACKING_VERSION = '2.9.2';
+const BM_TRACKING_VERSION = '2.9.3';
 
 const BM_TRACKING_ENDPOINT = 'https://siwvatcsucacrugbqmhh.supabase.co/functions/v1/heatmap-track';
 
@@ -7,7 +7,13 @@ function detectUserHash() {
 }
 
 function detectMainContents() {
-  return document.querySelector('.wrapper') || document.querySelector('#fs-app') || document.body;
+  const el = document.querySelector('#fs-app');
+  if (el) return el;
+  if (!detectMainContents.alerted) {
+    detectMainContents.alerted = true;
+    alert('BM Tracking: #fs-app element not found on this page.');
+  }
+  return document.body;
 }
 
 const DEVICE_BREAKPOINTS = { phone: 560, tablet: 1080 };
