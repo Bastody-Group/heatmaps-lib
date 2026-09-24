@@ -1,4 +1,4 @@
-const BM_TRACKING_VERSION = '2.7.0';
+const BM_TRACKING_VERSION = '2.8.0';
 
 const BM_TRACKING_ENDPOINT = 'https://siwvatcsucacrugbqmhh.supabase.co/functions/v1/heatmap-track';
 
@@ -113,6 +113,14 @@ class ClickScrollTracker {
     const selector = this.getSelector(event.target);
     const page = this.getActivePage();
 
+    let absX = null;
+    let absY = null;
+    if (this.mainContents) {
+      const containerRect = this.mainContents.getBoundingClientRect();
+      absX = (event.clientX - containerRect.left) + this.mainContents.scrollLeft;
+      absY = (event.clientY - containerRect.top) + this.mainContents.scrollTop;
+    }
+
     if (!this.click[page]) this.click[page] = [];
 
     const existing = this.click[page].find(item => item.selector === selector);
@@ -123,6 +131,8 @@ class ClickScrollTracker {
       existing.yPx = y;
       existing.x = `${((x / rect.width) * 100).toFixed(2)}%`;
       existing.y = `${((y / rect.height) * 100).toFixed(2)}%`;
+      existing.absX = absX;
+      existing.absY = absY;
     } else {
       this.click[page].push({
         selector,
@@ -130,7 +140,9 @@ class ClickScrollTracker {
         x: `${((x / rect.width) * 100).toFixed(2)}%`,
         y: `${((y / rect.height) * 100).toFixed(2)}%`,
         xPx: x,
-        yPx: y
+        yPx: y,
+        absX,
+        absY
       });
     }
 
@@ -217,7 +229,7 @@ class HeatmapOverlay {
 
     this.records = hasDemoData ? this.normalizeRecords(window.BM_HEATMAP_DEMO_DATA) : [];
     this.currentPage = window.MOCKUP_PAGE || 'home';
-    this.container = document.querySelector('#fs-app') || document.querySelector('.wrapper') || document.body;
+    this.container = detectMainContents();
 
     this.buildOverlay();
     this.buildPanel();
@@ -557,13 +569,22 @@ class HeatmapOverlay {
         } catch (error) {
           element = null;
         }
-        if (!element) return;
 
-        const rect = element.getBoundingClientRect();
-        const xPct = parseFloat(item.x) / 100;
-        const yPct = parseFloat(item.y) / 100;
-        const x = (rect.left - containerRect.left) + this.container.scrollLeft + xPct * rect.width;
-        const y = (rect.top - containerRect.top) + this.container.scrollTop + yPct * rect.height;
+        let x;
+        let y;
+
+        if (element) {
+          const rect = element.getBoundingClientRect();
+          const xPct = parseFloat(item.x) / 100;
+          const yPct = parseFloat(item.y) / 100;
+          x = (rect.left - containerRect.left) + this.container.scrollLeft + xPct * rect.width;
+          y = (rect.top - containerRect.top) + this.container.scrollTop + yPct * rect.height;
+        } else if (typeof item.absX === 'number' && typeof item.absY === 'number') {
+          x = item.absX;
+          y = item.absY;
+        } else {
+          return;
+        }
 
         points.push({ x, y, value: item.clicks, recordIndex, selector: item.selector });
       });
