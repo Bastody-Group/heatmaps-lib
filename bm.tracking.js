@@ -1,4 +1,4 @@
-const BM_TRACKING_VERSION = '2.9.4';
+const BM_TRACKING_VERSION = '2.9.5';
 
 const BM_TRACKING_ENDPOINT = 'https://siwvatcsucacrugbqmhh.supabase.co/functions/v1/heatmap-track';
 
@@ -564,6 +564,8 @@ class HeatmapOverlay {
         if (!element) return;
 
         const rect = element.getBoundingClientRect();
+        if (rect.width === 0 && rect.height === 0) return;
+
         const xPct = parseFloat(item.x) / 100;
         const yPct = parseFloat(item.y) / 100;
         const x = (rect.left - containerRect.left) + this.container.scrollLeft + xPct * rect.width;
