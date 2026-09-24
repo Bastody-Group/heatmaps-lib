@@ -118,6 +118,11 @@ class ClickScrollTracker {
     const selector = this.getSelector(event.target);
     const page = this.getActivePage();
 
+    const container = detectMainContents();
+    const containerRect = container.getBoundingClientRect();
+    const absX = (event.clientX - containerRect.left) + container.scrollLeft;
+    const absY = (event.clientY - containerRect.top) + container.scrollTop;
+
     if (!this.click[page]) this.click[page] = [];
 
     const existing = this.click[page].find(item => item.selector === selector);
@@ -128,6 +133,8 @@ class ClickScrollTracker {
       existing.yPx = y;
       existing.x = `${((x / rect.width) * 100).toFixed(2)}%`;
       existing.y = `${((y / rect.height) * 100).toFixed(2)}%`;
+      existing.absX = absX;
+      existing.absY = absY;
     } else {
       this.click[page].push({
         selector,
@@ -135,7 +142,9 @@ class ClickScrollTracker {
         x: `${((x / rect.width) * 100).toFixed(2)}%`,
         y: `${((y / rect.height) * 100).toFixed(2)}%`,
         xPx: x,
-        yPx: y
+        yPx: y,
+        absX,
+        absY
       });
     }
 
@@ -585,15 +594,23 @@ class HeatmapOverlay {
           element = null;
         }
 
-        if (!element) return;
+        const rect = element ? element.getBoundingClientRect() : null;
+        const isHidden = rect && rect.width === 0 && rect.height === 0;
 
-        const rect = element.getBoundingClientRect();
-        if (rect.width === 0 && rect.height === 0) return;
+        let x;
+        let y;
 
-        const xPct = parseFloat(item.x) / 100;
-        const yPct = parseFloat(item.y) / 100;
-        const x = (rect.left - containerRect.left) + this.container.scrollLeft + xPct * rect.width;
-        const y = (rect.top - containerRect.top) + this.container.scrollTop + yPct * rect.height;
+        if (element && !isHidden) {
+          const xPct = parseFloat(item.x) / 100;
+          const yPct = parseFloat(item.y) / 100;
+          x = (rect.left - containerRect.left) + this.container.scrollLeft + xPct * rect.width;
+          y = (rect.top - containerRect.top) + this.container.scrollTop + yPct * rect.height;
+        } else if (typeof item.absX === 'number' && typeof item.absY === 'number') {
+          x = item.absX;
+          y = item.absY;
+        } else {
+          return;
+        }
 
         points.push({ x, y, value: item.clicks, recordIndex, selector: item.selector });
       });
