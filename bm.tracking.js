@@ -1,4 +1,4 @@
-const BM_TRACKING_VERSION = '2.9.1';
+const BM_TRACKING_VERSION = '2.9.2';
 
 const BM_TRACKING_ENDPOINT = 'https://siwvatcsucacrugbqmhh.supabase.co/functions/v1/heatmap-track';
 
@@ -69,7 +69,7 @@ class ClickScrollTracker {
     this.calculateScrollPixels();
     document.addEventListener('mockup:page-change', () => this.calculateScrollPixels());
 
-    document.addEventListener('click', this.handleClick.bind(this), true);
+    (this.mainContents || document).addEventListener('click', this.handleClick.bind(this), true);
   }
 
   getActivePage() {
