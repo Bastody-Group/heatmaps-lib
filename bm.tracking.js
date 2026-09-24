@@ -1,4 +1,4 @@
-const BM_TRACKING_VERSION = '1.0.1';
+const BM_TRACKING_VERSION = '1.0.2';
 
 const BM_TRACKING_ENDPOINT = 'https://siwvatcsucacrugbqmhh.supabase.co/functions/v1/heatmap-track';
 
@@ -109,6 +109,7 @@ class ClickScrollTracker {
 
   handleClick(event) {
     if (!(event.target instanceof Element)) return;
+    if (event.target.closest('.welcome-screen')) return;
 
     const rect = event.target.getBoundingClientRect();
 
