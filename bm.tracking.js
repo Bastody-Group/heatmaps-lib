@@ -1,4 +1,4 @@
-const BM_TRACKING_VERSION = '1.0.2';
+const BM_TRACKING_VERSION = '1.0.0';
 
 const BM_TRACKING_ENDPOINT = 'https://siwvatcsucacrugbqmhh.supabase.co/functions/v1/heatmap-track';
 
@@ -50,8 +50,7 @@ document.addEventListener('bm:submit', () => {
 });
 
 class ClickScrollTracker {
-  constructor({ mainContents, endpoint, userHash } = {}) {
-    this.mainContents = mainContents || detectMainContents();
+  constructor({ endpoint, userHash } = {}) {
     this.endpoint = endpoint || BM_TRACKING_ENDPOINT;
     this.userHash = userHash || detectUserHash();
     this.viewportWidth = window.innerWidth;
@@ -81,7 +80,7 @@ class ClickScrollTracker {
     this.calculateScrollPixels();
     document.addEventListener('mockup:page-change', () => this.calculateScrollPixels());
 
-    (this.mainContents || document).addEventListener('click', this.handleClick.bind(this), true);
+    document.addEventListener('click', this.handleClick.bind(this), true);
   }
 
   getActivePage() {
@@ -109,7 +108,6 @@ class ClickScrollTracker {
 
   handleClick(event) {
     if (!(event.target instanceof Element)) return;
-    if (event.target.closest('.welcome-screen')) return;
 
     const rect = event.target.getBoundingClientRect();
 
