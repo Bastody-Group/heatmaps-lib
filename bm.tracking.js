@@ -1,4 +1,4 @@
-const BM_TRACKING_VERSION = '1.0.0';
+const BM_TRACKING_VERSION = '1.0.1';
 
 const BM_TRACKING_ENDPOINT = 'https://siwvatcsucacrugbqmhh.supabase.co/functions/v1/heatmap-track';
 
@@ -20,6 +20,7 @@ const DEVICE_BREAKPOINTS = { phone: 560, tablet: 1080 };
 const DEVICE_WIDTHS = { phone: '390px', tablet: '768px', desktop: '' };
 
 function isLocalEnvironment() {
+  if (window.BM_ALLOW_LOCAL_SUBMIT) return false;
   const { protocol, hostname } = window.location;
   return protocol === 'file:' || hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '' || hostname === '[::1]';
 }
