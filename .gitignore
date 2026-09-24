@@ -1,0 +1,12 @@
+.DS_Store
+node_modules/
+.vscode/
+
+# цей git-репозиторій публічний і містить лише bm.tracking.js -
+# бекенд (supabase/), доки, package.json тощо лишаються тільки локально
+supabase/
+CHANGELOG.md
+README.md
+docs-artifact.html
+package.json
+deno.lock
