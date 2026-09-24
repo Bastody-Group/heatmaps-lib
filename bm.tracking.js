@@ -368,8 +368,12 @@ class HeatmapOverlay {
 
     let mutationRenderTimeout = null;
     this.mutationObserver = new MutationObserver((mutations) => {
-      const isOwnOverlayChange = mutations.every(m => this.overlayRoot.contains(m.target));
-      if (isOwnOverlayChange) return;
+      const isRelevant = mutations.some(m => {
+        if (this.overlayRoot.contains(m.target)) return false;
+        if (m.type === 'attributes' && m.attributeName === 'style') return false;
+        return true;
+      });
+      if (!isRelevant) return;
       clearTimeout(mutationRenderTimeout);
       mutationRenderTimeout = setTimeout(() => this.render(), 100);
     });

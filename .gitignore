@@ -1,8 +1,9 @@
 .DS_Store
 node_modules/
 .vscode/
+.claude/
 
-# цей git-репозиторій публічний і містить лише bm.tracking.js -
+# цей git-репозиторій публічний і містить лише bm.tracking.js/bm.tracking.min.js -
 # бекенд (supabase/), доки, package.json тощо лишаються тільки локально
 supabase/
 CHANGELOG.md
