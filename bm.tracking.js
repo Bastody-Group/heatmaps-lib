@@ -1,4 +1,4 @@
-const BM_TRACKING_VERSION = '2.9.0';
+const BM_TRACKING_VERSION = '2.9.1';
 
 const BM_TRACKING_ENDPOINT = 'https://siwvatcsucacrugbqmhh.supabase.co/functions/v1/heatmap-track';
 
@@ -151,15 +151,18 @@ class ClickScrollTracker {
     if (!element.parentElement) {
       return element.tagName.toLowerCase();
     }
-    const parent = element.parentElement;
-    if (parent.tagName.toLowerCase() === 'body') {
-      return element.tagName.toLowerCase();
-    }
 
+    const parent = element.parentElement;
     const siblings = Array.from(parent.children);
     const nth = siblings.indexOf(element) + 1;
     const tagName = element.tagName.toLowerCase();
-    return `${this.getSelector(parent)} > ${tagName}${siblings.length > 1 ? `:nth-child(${nth})` : ''}`;
+    const ownPart = `${tagName}${siblings.length > 1 ? `:nth-child(${nth})` : ''}`;
+
+    if (parent.tagName.toLowerCase() === 'body') {
+      return `body > ${ownPart}`;
+    }
+
+    return `${this.getSelector(parent)} > ${ownPart}`;
   }
 
   getPayload() {
