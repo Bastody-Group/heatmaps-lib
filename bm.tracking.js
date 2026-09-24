@@ -329,11 +329,14 @@ class HeatmapOverlay {
     this.scrollLayer = document.createElement('div');
     this.scrollLayer.style.cssText = 'position:absolute; inset:0; mix-blend-mode:multiply; transition:opacity .2s;';
 
-    this.clickCanvas = document.createElement('canvas');
-    this.clickCanvas.style.cssText = 'position:absolute; inset:0;';
+    this.fallbackPointsLayer = document.createElement('div');
+    this.fallbackPointsLayer.id = 'bm-heatmap-fallback-points';
+    this.fallbackPointsLayer.style.cssText = 'position:absolute; top:0; left:0;';
 
-    this.overlayRoot.append(this.scrollLayer, this.clickCanvas);
+    this.overlayRoot.append(this.scrollLayer, this.fallbackPointsLayer);
     this.container.appendChild(this.overlayRoot);
+
+    this.pointElements = [];
 
     this.resizeOverlay();
   }
@@ -342,15 +345,11 @@ class HeatmapOverlay {
     const deviceWidth = DEVICE_WIDTHS[this.device];
     const width = deviceWidth ? parseInt(deviceWidth, 10) : this.container.scrollWidth;
     const height = this.container.scrollHeight;
-    const dpr = window.devicePixelRatio || 1;
 
-    [this.overlayRoot, this.scrollLayer, this.clickCanvas].forEach(el => {
+    [this.overlayRoot, this.scrollLayer, this.fallbackPointsLayer].forEach(el => {
       el.style.width = `${width}px`;
       el.style.height = `${height}px`;
     });
-
-    this.clickCanvas.width = width * dpr;
-    this.clickCanvas.height = height * dpr;
   }
 
   bindWatchers() {
@@ -407,19 +406,20 @@ class HeatmapOverlay {
       return;
     }
 
-    const containerRect = this.container.getBoundingClientRect();
-    const mouseX = (event.clientX - containerRect.left) + this.container.scrollLeft;
-    const mouseY = (event.clientY - containerRect.top) + this.container.scrollTop;
-
     const HOVER_RADIUS = 24;
-    const nearby = this.currentPoints.filter(point => Math.hypot(point.x - mouseX, point.y - mouseY) <= HOVER_RADIUS);
+    const nearby = this.currentPoints.filter(point => {
+      const rect = point.element.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      return Math.hypot(event.clientX - cx, event.clientY - cy) <= HOVER_RADIUS;
+    });
 
     if (!nearby.length) {
       this.hideTooltip();
       return;
     }
 
-    const totalClicks = nearby.reduce((sum, point) => sum + point.value, 0);
+    const totalClicks = nearby.reduce((sum, point) => sum + point.item.clicks, 0);
     const respondents = new Set(nearby.map(point => point.recordIndex)).size;
 
     this.tooltip.textContent = `${totalClicks} ${this.pluralize(totalClicks, 'click', 'clicks')} · ${respondents} ${this.pluralize(respondents, 'respondent', 'respondents')}`;
@@ -578,9 +578,8 @@ class HeatmapOverlay {
     if (pageLabel) pageLabel.textContent = this.currentPage;
   }
 
-  getClickPoints(page) {
-    const containerRect = this.container.getBoundingClientRect();
-    const points = [];
+  collectClickItems(page) {
+    const items = [];
 
     this.records.filter(record => this.recordMatchesDevice(record)).forEach((record, recordIndex) => {
       const clicksOnPage = record.click && record.click[page];
@@ -597,112 +596,96 @@ class HeatmapOverlay {
         const rect = element ? element.getBoundingClientRect() : null;
         const isHidden = rect && rect.width === 0 && rect.height === 0;
 
-        let x;
-        let y;
-
-        if (element && !isHidden) {
-          const xPct = parseFloat(item.x) / 100;
-          const yPct = parseFloat(item.y) / 100;
-          x = (rect.left - containerRect.left) + this.container.scrollLeft + xPct * rect.width;
-          y = (rect.top - containerRect.top) + this.container.scrollTop + yPct * rect.height;
-        } else if (typeof item.absX === 'number' && typeof item.absY === 'number') {
-          x = item.absX;
-          y = item.absY;
-        } else {
-          return;
-        }
-
-        points.push({ x, y, value: item.clicks, recordIndex, selector: item.selector });
+        items.push({ item, element: element && !isHidden ? element : null, recordIndex });
       });
     });
 
-    return points;
+    return items;
+  }
+
+  pointParentFor(element) {
+    const nonContainerTags = ['IMG', 'VIDEO', 'INPUT', 'SELECT', 'TEXTAREA', 'IFRAME', 'CANVAS'];
+    const parent = nonContainerTags.includes(element.tagName) ? (element.parentElement || this.container) : element;
+
+    if (getComputedStyle(parent).position === 'static') {
+      parent.style.position = 'relative';
+    }
+
+    return parent;
+  }
+
+  clearClickPoints() {
+    (this.pointElements || []).forEach(el => el.remove());
+    this.pointElements = [];
   }
 
   renderClickHeatmap() {
-    const ctx = this.clickCanvas.getContext('2d');
-    ctx.clearRect(0, 0, this.clickCanvas.width, this.clickCanvas.height);
-
+    this.clearClickPoints();
     this.currentPoints = [];
     if (!this.state.click) return;
 
-    const points = this.getClickPoints(this.currentPage);
-    if (!points.length) return;
-    this.currentPoints = points;
-
-    const dpr = window.devicePixelRatio || 1;
-
-    const mask = document.createElement('canvas');
-    mask.width = this.clickCanvas.width;
-    mask.height = this.clickCanvas.height;
-    const maskCtx = mask.getContext('2d');
-    maskCtx.globalCompositeOperation = 'lighter';
-
-    points.forEach(point => {
-      const radius = Math.min(30, 9 + 5 * Math.sqrt(point.value)) * dpr;
-      const x = point.x * dpr;
-      const y = point.y * dpr;
-      const intensity = Math.min(1, point.value / CLICK_HOT_THRESHOLD);
-      const peakAlpha = 0.4 + intensity * 0.6;
-
-      const gradient = maskCtx.createRadialGradient(x, y, 0, x, y, radius);
-      gradient.addColorStop(0, `rgba(0,0,0,${peakAlpha})`);
-      gradient.addColorStop(0.6, `rgba(0,0,0,${peakAlpha * 0.75})`);
-      gradient.addColorStop(1, 'rgba(0,0,0,0)');
-
-      maskCtx.fillStyle = gradient;
-      maskCtx.beginPath();
-      maskCtx.arc(x, y, radius, 0, Math.PI * 2);
-      maskCtx.fill();
+    this.collectClickItems(this.currentPage).forEach(({ item, element, recordIndex }) => {
+      this.placeClickPoint(item, element, recordIndex);
     });
-
-    const blurred = document.createElement('canvas');
-    blurred.width = mask.width;
-    blurred.height = mask.height;
-    const blurredCtx = blurred.getContext('2d');
-    blurredCtx.filter = `blur(${6 * dpr}px)`;
-    blurredCtx.drawImage(mask, 0, 0);
-
-    const imageData = blurredCtx.getImageData(0, 0, blurred.width, blurred.height);
-    const lut = this.getColorLUT();
-    const data = imageData.data;
-
-    for (let i = 0; i < data.length; i += 4) {
-      const rawAlpha = data[i + 3];
-      if (rawAlpha === 0) continue;
-
-      const boosted = Math.min(255, rawAlpha + 30);
-      const lutIndex = boosted * 4;
-      data[i] = lut[lutIndex];
-      data[i + 1] = lut[lutIndex + 1];
-      data[i + 2] = lut[lutIndex + 2];
-      data[i + 3] = Math.min(230, boosted + 20);
-    }
-
-    ctx.putImageData(imageData, 0, 0);
   }
 
-  getColorLUT() {
-    if (this.colorLUT) return this.colorLUT;
+  placeClickPoint(item, element, recordIndex) {
+    const intensity = Math.min(1, item.clicks / CLICK_HOT_THRESHOLD);
+    const size = Math.min(60, 18 + 10 * Math.sqrt(item.clicks));
+    const opacity = 0.35 + intensity * 0.45;
+    const color = this.colorForIntensity(intensity);
 
-    const canvas = document.createElement('canvas');
-    canvas.width = 256;
-    canvas.height = 1;
-    const ctx = canvas.getContext('2d');
+    const point = document.createElement('div');
+    point.className = 'bm-hm-point';
+    point.style.cssText = `position:absolute; width:${size}px; height:${size}px; border-radius:50%; transform:translate(-50%,-50%); pointer-events:none; filter:blur(${size / 4}px); background:radial-gradient(circle, ${color} 0%, transparent 70%); opacity:${opacity};`;
 
-    const gradient = ctx.createLinearGradient(0, 0, 256, 0);
-    gradient.addColorStop(0.0, 'rgba(0,80,255,1)');
-    gradient.addColorStop(0.2, 'rgba(0,140,255,1)');
-    gradient.addColorStop(0.45, 'rgba(0,220,120,1)');
-    gradient.addColorStop(0.65, 'rgba(255,235,0,1)');
-    gradient.addColorStop(0.85, 'rgba(255,140,0,1)');
-    gradient.addColorStop(1.0, 'rgba(255,0,0,1)');
+    let parent;
 
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, 256, 1);
+    if (element) {
+      parent = this.pointParentFor(element);
+      const parentRect = parent.getBoundingClientRect();
+      const elRect = element.getBoundingClientRect();
+      const xPct = parseFloat(item.x) / 100;
+      const yPct = parseFloat(item.y) / 100;
+      const pageX = elRect.left + xPct * elRect.width;
+      const pageY = elRect.top + yPct * elRect.height;
+      point.style.left = `${(pageX - parentRect.left) + parent.scrollLeft}px`;
+      point.style.top = `${(pageY - parentRect.top) + parent.scrollTop}px`;
+    } else if (typeof item.absX === 'number' && typeof item.absY === 'number') {
+      parent = this.fallbackPointsLayer;
+      point.style.left = `${item.absX}px`;
+      point.style.top = `${item.absY}px`;
+    } else {
+      return;
+    }
 
-    this.colorLUT = ctx.getImageData(0, 0, 256, 1).data;
-    return this.colorLUT;
+    parent.appendChild(point);
+    this.pointElements.push(point);
+    this.currentPoints.push({ element: point, item, recordIndex });
+  }
+
+  colorForIntensity(intensity) {
+    const stops = [
+      [0.0, [0, 80, 255]],
+      [0.2, [0, 140, 255]],
+      [0.45, [0, 220, 120]],
+      [0.65, [255, 235, 0]],
+      [0.85, [255, 140, 0]],
+      [1.0, [255, 0, 0]],
+    ];
+    const clamped = Math.max(0, Math.min(1, intensity));
+
+    for (let i = 0; i < stops.length - 1; i++) {
+      const [p0, c0] = stops[i];
+      const [p1, c1] = stops[i + 1];
+      if (clamped >= p0 && clamped <= p1) {
+        const t = p1 === p0 ? 0 : (clamped - p0) / (p1 - p0);
+        const c = c0.map((v, idx) => Math.round(v + (c1[idx] - v) * t));
+        return `rgb(${c[0]},${c[1]},${c[2]})`;
+      }
+    }
+
+    return `rgb(${stops[stops.length - 1][1].join(',')})`;
   }
 
   getScrollDepths(page) {
