@@ -1,4 +1,4 @@
-const BM_TRACKING_VERSION = '2.8.0';
+const BM_TRACKING_VERSION = '2.8.1';
 
 const BM_TRACKING_ENDPOINT = 'https://siwvatcsucacrugbqmhh.supabase.co/functions/v1/heatmap-track';
 
@@ -70,7 +70,7 @@ class ClickScrollTracker {
     document.addEventListener('mockup:page-change', () => this.calculateScrollPixels());
 
     if (this.mainContents) {
-      this.mainContents.addEventListener('click', this.handleClick.bind(this));
+      this.mainContents.addEventListener('click', this.handleClick.bind(this), true);
     } else {
       console.warn('ClickScrollTracker: no click target found, click tracking disabled');
     }
@@ -100,8 +100,6 @@ class ClickScrollTracker {
   }
 
   handleClick(event) {
-    event.stopPropagation();
-
     if (!(event.target instanceof Element)) return;
 
     const rect = event.target.getBoundingClientRect();
