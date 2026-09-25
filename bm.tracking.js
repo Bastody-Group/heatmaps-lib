@@ -119,6 +119,7 @@ class ClickScrollTracker {
 
   handleClick(event) {
     if (!(event.target instanceof Element)) return;
+    if (event.target === document.documentElement || event.target === document.body) return;
 
     const rect = event.target.getBoundingClientRect();
 
@@ -601,6 +602,8 @@ class HeatmapOverlay {
           element = null;
         }
 
+        if (element === document.documentElement || element === document.body) element = null;
+
         const rect = element ? element.getBoundingClientRect() : null;
         const isHidden = rect && rect.width === 0 && rect.height === 0;
 
@@ -631,48 +634,91 @@ class HeatmapOverlay {
     this.currentPoints = [];
     if (!this.state.click) return;
 
-    this.collectClickItems(this.currentPage).forEach(({ item, element, recordIndex }) => {
-      this.placeClickPoint(item, element, recordIndex);
+    const CLUSTER_RADIUS = 24;
+    const placements = this.collectClickItems(this.currentPage)
+      .map(({ item, element, recordIndex }) => this.computePlacement(item, element, recordIndex))
+      .filter(Boolean);
+
+    placements.forEach(placement => {
+      placement.clusterClicks = placements.reduce((sum, other) => (
+        Math.hypot(placement.pageX - other.pageX, placement.pageY - other.pageY) <= CLUSTER_RADIUS
+          ? sum + other.item.clicks
+          : sum
+      ), 0);
     });
+
+    const hottest = Math.max(CLICK_HOT_THRESHOLD, ...placements.map(p => p.clusterClicks));
+    placements.forEach(placement => this.placeClickPoint(placement, hottest));
   }
 
-  placeClickPoint(item, element, recordIndex) {
-    const intensity = Math.min(1, item.clicks / CLICK_HOT_THRESHOLD);
-    const size = Math.min(60, 18 + 10 * Math.sqrt(item.clicks));
-    const opacity = 0.55 + intensity * 0.45;
-    const color = this.colorForIntensity(intensity);
-
-    const point = document.createElement('div');
-    point.className = 'bm-hm-point';
-    point.style.cssText = `position:absolute; width:${size}px; height:${size}px; border-radius:50%; transform:translate(-50%,-50%); pointer-events:none; filter:blur(4px); background:radial-gradient(circle, ${color} 0%, ${color} 45%, transparent 100%); opacity:${opacity};`;
-
-    let parent;
-
+  computePlacement(item, element, recordIndex) {
     if (element) {
-      parent = this.pointParentFor(element);
+      const parent = this.pointParentFor(element);
       const parentRect = parent.getBoundingClientRect();
       const elRect = element.getBoundingClientRect();
       const xPct = parseFloat(item.x) / 100;
       const yPct = parseFloat(item.y) / 100;
       const pageX = elRect.left + xPct * elRect.width;
       const pageY = elRect.top + yPct * elRect.height;
-      point.style.left = `${(pageX - parentRect.left) + parent.scrollLeft}px`;
-      point.style.top = `${(pageY - parentRect.top) + parent.scrollTop}px`;
-    } else if (typeof item.absXPct === 'number' && typeof item.absYPct === 'number') {
-      const containerRect = this.container.getBoundingClientRect();
-      parent = this.fallbackPointsLayer;
-      point.style.left = `${(item.absXPct / 100) * containerRect.width}px`;
-      point.style.top = `${(item.absYPct / 100) * containerRect.height}px`;
-    } else if (typeof item.absX === 'number' && typeof item.absY === 'number') {
+
+      return {
+        item,
+        recordIndex,
+        parent,
+        left: (pageX - parentRect.left) + parent.scrollLeft,
+        top: (pageY - parentRect.top) + parent.scrollTop,
+        pageX,
+        pageY,
+      };
+    }
+
+    const containerRect = this.container.getBoundingClientRect();
+
+    if (typeof item.absXPct === 'number' && typeof item.absYPct === 'number') {
+      const left = (item.absXPct / 100) * containerRect.width;
+      const top = (item.absYPct / 100) * containerRect.height;
+
+      return {
+        item,
+        recordIndex,
+        parent: this.fallbackPointsLayer,
+        left,
+        top,
+        pageX: containerRect.left + left - this.container.scrollLeft,
+        pageY: containerRect.top + top - this.container.scrollTop,
+      };
+    }
+
+    if (typeof item.absX === 'number' && typeof item.absY === 'number') {
       const width = this.container.scrollWidth;
       const height = this.container.scrollHeight;
-      if (item.absX < 0 || item.absX > width || item.absY < 0 || item.absY > height) return;
-      parent = this.fallbackPointsLayer;
-      point.style.left = `${item.absX}px`;
-      point.style.top = `${item.absY}px`;
-    } else {
-      return;
+      if (item.absX < 0 || item.absX > width || item.absY < 0 || item.absY > height) return null;
+
+      return {
+        item,
+        recordIndex,
+        parent: this.fallbackPointsLayer,
+        left: item.absX,
+        top: item.absY,
+        pageX: containerRect.left + item.absX - this.container.scrollLeft,
+        pageY: containerRect.top + item.absY - this.container.scrollTop,
+      };
     }
+
+    return null;
+  }
+
+  placeClickPoint(placement, hottest) {
+    const { item, recordIndex, parent, left, top, clusterClicks } = placement;
+    const totalClicks = clusterClicks || item.clicks;
+    const intensity = Math.min(1, totalClicks / hottest);
+    const size = Math.min(60, 18 + 10 * Math.sqrt(totalClicks));
+    const opacity = 0.55 + intensity * 0.45;
+    const color = this.colorForIntensity(intensity);
+
+    const point = document.createElement('div');
+    point.className = 'bm-hm-point';
+    point.style.cssText = `position:absolute; width:${size}px; height:${size}px; border-radius:50%; transform:translate(-50%,-50%); pointer-events:none; filter:blur(4px); background:radial-gradient(circle, ${color} 0%, ${color} 45%, transparent 100%); opacity:${opacity}; left:${left}px; top:${top}px;`;
 
     parent.appendChild(point);
     this.pointElements.push(point);
