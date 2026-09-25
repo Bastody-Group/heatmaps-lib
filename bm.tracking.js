@@ -621,12 +621,12 @@ class HeatmapOverlay {
   placeClickPoint(item, element, recordIndex) {
     const intensity = Math.min(1, item.clicks / CLICK_HOT_THRESHOLD);
     const size = Math.min(60, 18 + 10 * Math.sqrt(item.clicks));
-    const opacity = 0.35 + intensity * 0.45;
+    const opacity = 0.55 + intensity * 0.45;
     const color = this.colorForIntensity(intensity);
 
     const point = document.createElement('div');
     point.className = 'bm-hm-point';
-    point.style.cssText = `position:absolute; width:${size}px; height:${size}px; border-radius:50%; transform:translate(-50%,-50%); pointer-events:none; filter:blur(${size / 4}px); background:radial-gradient(circle, ${color} 0%, transparent 70%); opacity:${opacity};`;
+    point.style.cssText = `position:absolute; width:${size}px; height:${size}px; border-radius:50%; transform:translate(-50%,-50%); pointer-events:none; filter:blur(4px); background:radial-gradient(circle, ${color} 0%, ${color} 45%, transparent 100%); opacity:${opacity};`;
 
     let parent;
 
