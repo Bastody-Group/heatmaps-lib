@@ -18,6 +18,23 @@ function detectMainContents() {
 
 const DEVICE_BREAKPOINTS = { phone: 560, tablet: 1080 };
 const DEVICE_WIDTHS = { phone: '390px', tablet: '768px', desktop: '' };
+const NON_CONTAINER_TAGS = ['IMG', 'VIDEO', 'INPUT', 'SELECT', 'TEXTAREA', 'IFRAME', 'CANVAS'];
+
+function interpolateColor(percent, stops) {
+  const clamped = Math.max(0, Math.min(1, percent));
+
+  for (let i = 0; i < stops.length - 1; i++) {
+    const [p0, c0] = stops[i];
+    const [p1, c1] = stops[i + 1];
+    if (clamped >= p0 && clamped <= p1) {
+      const t = p1 === p0 ? 0 : (clamped - p0) / (p1 - p0);
+      const c = c0.map((v, idx) => Math.round(v + (c1[idx] - v) * t));
+      return `rgb(${c[0]},${c[1]},${c[2]})`;
+    }
+  }
+
+  return `rgb(${stops[stops.length - 1][1].join(',')})`;
+}
 
 function classifyDevice(width) {
   if (!width) return null;
@@ -116,6 +133,8 @@ class ClickScrollTracker {
     const containerRect = container.getBoundingClientRect();
     const absX = (event.clientX - containerRect.left) + container.scrollLeft;
     const absY = (event.clientY - containerRect.top) + container.scrollTop;
+    const absXPct = containerRect.width ? (absX / containerRect.width) * 100 : 0;
+    const absYPct = containerRect.height ? (absY / containerRect.height) * 100 : 0;
 
     if (!this.click[page]) this.click[page] = [];
 
@@ -127,8 +146,8 @@ class ClickScrollTracker {
       existing.yPx = y;
       existing.x = `${((x / rect.width) * 100).toFixed(2)}%`;
       existing.y = `${((y / rect.height) * 100).toFixed(2)}%`;
-      existing.absX = absX;
-      existing.absY = absY;
+      existing.absXPct = absXPct;
+      existing.absYPct = absYPct;
     } else {
       this.click[page].push({
         selector,
@@ -137,8 +156,8 @@ class ClickScrollTracker {
         y: `${((y / rect.height) * 100).toFixed(2)}%`,
         xPx: x,
         yPx: y,
-        absX,
-        absY
+        absXPct,
+        absYPct
       });
     }
 
@@ -313,7 +332,7 @@ class HeatmapOverlay {
 
     this.overlayRoot = document.createElement('div');
     this.overlayRoot.id = 'bm-heatmap-overlay-root';
-    this.overlayRoot.style.cssText = 'position:absolute; top:0; left:0; pointer-events:none; z-index:2147483000;';
+    this.overlayRoot.style.cssText = 'position:absolute; top:0; left:0; overflow:hidden; pointer-events:none; z-index:2147483000;';
 
     this.scrollLayer = document.createElement('div');
     this.scrollLayer.style.cssText = 'position:absolute; inset:0; mix-blend-mode:multiply; transition:opacity .2s;';
@@ -593,8 +612,7 @@ class HeatmapOverlay {
   }
 
   pointParentFor(element) {
-    const nonContainerTags = ['IMG', 'VIDEO', 'INPUT', 'SELECT', 'TEXTAREA', 'IFRAME', 'CANVAS'];
-    const parent = nonContainerTags.includes(element.tagName) ? (element.parentElement || this.container) : element;
+    const parent = NON_CONTAINER_TAGS.includes(element.tagName) ? (element.parentElement || this.container) : element;
 
     if (getComputedStyle(parent).position === 'static') {
       parent.style.position = 'relative';
@@ -640,7 +658,15 @@ class HeatmapOverlay {
       const pageY = elRect.top + yPct * elRect.height;
       point.style.left = `${(pageX - parentRect.left) + parent.scrollLeft}px`;
       point.style.top = `${(pageY - parentRect.top) + parent.scrollTop}px`;
+    } else if (typeof item.absXPct === 'number' && typeof item.absYPct === 'number') {
+      const containerRect = this.container.getBoundingClientRect();
+      parent = this.fallbackPointsLayer;
+      point.style.left = `${(item.absXPct / 100) * containerRect.width}px`;
+      point.style.top = `${(item.absYPct / 100) * containerRect.height}px`;
     } else if (typeof item.absX === 'number' && typeof item.absY === 'number') {
+      const width = this.container.scrollWidth;
+      const height = this.container.scrollHeight;
+      if (item.absX < 0 || item.absX > width || item.absY < 0 || item.absY > height) return;
       parent = this.fallbackPointsLayer;
       point.style.left = `${item.absX}px`;
       point.style.top = `${item.absY}px`;
@@ -654,27 +680,14 @@ class HeatmapOverlay {
   }
 
   colorForIntensity(intensity) {
-    const stops = [
+    return interpolateColor(intensity, [
       [0.0, [0, 80, 255]],
       [0.2, [0, 140, 255]],
       [0.45, [0, 220, 120]],
       [0.65, [255, 235, 0]],
       [0.85, [255, 140, 0]],
       [1.0, [255, 0, 0]],
-    ];
-    const clamped = Math.max(0, Math.min(1, intensity));
-
-    for (let i = 0; i < stops.length - 1; i++) {
-      const [p0, c0] = stops[i];
-      const [p1, c1] = stops[i + 1];
-      if (clamped >= p0 && clamped <= p1) {
-        const t = p1 === p0 ? 0 : (clamped - p0) / (p1 - p0);
-        const c = c0.map((v, idx) => Math.round(v + (c1[idx] - v) * t));
-        return `rgb(${c[0]},${c[1]},${c[2]})`;
-      }
-    }
-
-    return `rgb(${stops[stops.length - 1][1].join(',')})`;
+    ]);
   }
 
   getScrollDepths(page) {
@@ -712,25 +725,13 @@ class HeatmapOverlay {
   }
 
   scrollColor(percent) {
-    const stops = [
+    return interpolateColor(percent, [
       [0, [220, 40, 40]],
       [0.25, [240, 140, 40]],
       [0.5, [230, 210, 40]],
       [0.75, [140, 200, 60]],
       [1, [40, 180, 90]],
-    ];
-
-    for (let i = 0; i < stops.length - 1; i++) {
-      const [p0, c0] = stops[i];
-      const [p1, c1] = stops[i + 1];
-      if (percent >= p0 && percent <= p1) {
-        const t = (percent - p0) / (p1 - p0);
-        const c = c0.map((v, idx) => Math.round(v + (c1[idx] - v) * t));
-        return `rgb(${c[0]},${c[1]},${c[2]})`;
-      }
-    }
-
-    return 'rgb(40,180,90)';
+    ]);
   }
 }
 
