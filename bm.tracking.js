@@ -713,7 +713,7 @@ class HeatmapOverlay {
     const totalClicks = clusterClicks || item.clicks;
     const intensity = Math.min(1, totalClicks / hottest);
     const size = Math.min(60, 18 + 10 * Math.sqrt(totalClicks));
-    const opacity = 0.55 + intensity * 0.45;
+    const opacity = 0.35 + intensity * 0.3;
     const color = this.colorForIntensity(intensity);
 
     const point = document.createElement('div');
