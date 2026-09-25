@@ -607,7 +607,7 @@ class HeatmapOverlay {
         const rect = element ? element.getBoundingClientRect() : null;
         const isHidden = rect && rect.width === 0 && rect.height === 0;
 
-        items.push({ item, element: element && !isHidden ? element : null, recordIndex });
+        items.push({ item, element: isHidden ? null : element, skipFallback: isHidden, recordIndex });
       });
     });
 
@@ -636,7 +636,7 @@ class HeatmapOverlay {
 
     const CLUSTER_RADIUS = 24;
     const placements = this.collectClickItems(this.currentPage)
-      .map(({ item, element, recordIndex }) => this.computePlacement(item, element, recordIndex))
+      .map(({ item, element, skipFallback, recordIndex }) => this.computePlacement(item, element, skipFallback, recordIndex))
       .filter(Boolean);
 
     placements.forEach(placement => {
@@ -651,7 +651,9 @@ class HeatmapOverlay {
     placements.forEach(placement => this.placeClickPoint(placement, hottest));
   }
 
-  computePlacement(item, element, recordIndex) {
+  computePlacement(item, element, skipFallback, recordIndex) {
+    if (skipFallback) return null;
+
     if (element) {
       const parent = this.pointParentFor(element);
       const parentRect = parent.getBoundingClientRect();
