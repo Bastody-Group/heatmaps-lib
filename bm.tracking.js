@@ -406,7 +406,7 @@ class HeatmapOverlay {
     this.tooltip = document.createElement('div');
     this.tooltip.id = 'bm-heatmap-tooltip';
     this.tooltip.style.cssText = 'position:fixed; z-index:2147483647; pointer-events:none; background:rgba(18,21,26,.95); color:#fff; font:12px/1.4 -apple-system,Arial,sans-serif; padding:6px 10px; border-radius:8px; box-shadow:0 4px 14px rgba(0,0,0,.35); display:none; white-space:nowrap;';
-    document.body.appendChild(this.tooltip);
+    document.documentElement.appendChild(this.tooltip);
   }
 
   handleHover(event) {
@@ -499,7 +499,7 @@ class HeatmapOverlay {
         <div class="bm-hm-status" data-role="status">No data loaded</div>
       </div>
     `;
-    document.body.appendChild(panel);
+    document.documentElement.appendChild(panel);
     this.panel = panel;
 
     panel.querySelector('.bm-hm-header').addEventListener('click', () => panel.classList.toggle('collapsed'));
