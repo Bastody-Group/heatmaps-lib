@@ -1,4 +1,4 @@
-const BM_TRACKING_VERSION = '1.0.2';
+const BM_TRACKING_VERSION = '1.0.3';
 
 const BM_TRACKING_ENDPOINT = 'https://siwvatcsucacrugbqmhh.supabase.co/functions/v1/heatmap-track';
 
@@ -482,6 +482,8 @@ class HeatmapOverlay {
       #bm-heatmap-panel .bm-hm-device { display:flex; gap:4px; }
       #bm-heatmap-panel .bm-hm-device button { flex:1; background:#2a2f36; color:#9aa4af; border:none; border-radius:6px; padding:5px 0; font-size:11px; cursor:pointer; font-family:inherit; }
       #bm-heatmap-panel .bm-hm-device button.on { background:#2f9e63; color:#fff; }
+      #bm-heatmap-panel .bm-hm-screenshot-btn { background:#2a2f36; color:#fff; border:none; border-radius:6px; padding:7px 0; font-size:12px; cursor:pointer; font-family:inherit; }
+      #bm-heatmap-panel .bm-hm-screenshot-btn:hover { background:#343a42; }
     `;
     document.head.appendChild(style);
 
@@ -507,6 +509,7 @@ class HeatmapOverlay {
           <button type="button" data-device="tablet">Tablet</button>
           <button type="button" data-device="desktop">Desktop</button>
         </div>
+        <button type="button" class="bm-hm-screenshot-btn" data-role="screenshot-btn">Screenshot</button>
         <div class="bm-hm-status" data-role="status">No data loaded</div>
       </div>
     `;
@@ -549,6 +552,45 @@ class HeatmapOverlay {
         }, 50);
       });
     });
+
+    panel.querySelector('[data-role="screenshot-btn"]').addEventListener('click', () => this.captureScreenshot());
+  }
+
+  loadHtml2Canvas() {
+    if (window.html2canvas) return Promise.resolve();
+    if (this.html2canvasPromise) return this.html2canvasPromise;
+
+    this.html2canvasPromise = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error('Failed to load html2canvas'));
+      document.head.appendChild(script);
+    });
+
+    return this.html2canvasPromise;
+  }
+
+  captureScreenshot() {
+    const target = document.querySelector('#fs-app') || document.body;
+    this.updateStatus('Capturing screenshot...');
+
+    this.loadHtml2Canvas()
+      .then(() => window.html2canvas(target, { useCORS: true, allowTaint: true }))
+      .then(canvas => new Promise(resolve => canvas.toBlob(resolve, 'image/png')))
+      .then(blob => {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `heatmap-screenshot-${Date.now()}.png`;
+        link.click();
+        URL.revokeObjectURL(url);
+        this.updateStatus('Screenshot saved');
+      })
+      .catch(error => {
+        console.warn('HeatmapOverlay: screenshot failed', error);
+        this.updateStatus('Error: screenshot failed');
+      });
   }
 
   syncUrlParams() {
