@@ -1,4 +1,4 @@
-const BM_TRACKING_VERSION = '1.0.1';
+const BM_TRACKING_VERSION = '1.0.2';
 
 const BM_TRACKING_ENDPOINT = 'https://siwvatcsucacrugbqmhh.supabase.co/functions/v1/heatmap-track';
 
@@ -331,8 +331,8 @@ class HeatmapOverlay {
 
   applyDeviceWidth() {
     this.container.style.maxWidth = DEVICE_WIDTHS[this.device] ?? '';
-    this.container.style.marginLeft = this.device === 'desktop' ? '' : 'auto';
-    this.container.style.marginRight = this.device === 'desktop' ? '' : 'auto';
+    // this.container.style.marginLeft = this.device === 'desktop' ? '' : 'auto';
+    // this.container.style.marginRight = this.device === 'desktop' ? '' : 'auto';
   }
 
   buildOverlay() {
