@@ -1,4 +1,4 @@
-const BM_TRACKING_VERSION = '1.0.8';
+const BM_TRACKING_VERSION = '1.0.9';
 
 const BM_TRACKING_ENDPOINT = 'https://siwvatcsucacrugbqmhh.supabase.co/functions/v1/heatmap-track';
 
@@ -602,23 +602,37 @@ class HeatmapOverlay {
         this.updateStatus('Capturing screenshot...');
 
         // Is something else actually rendered on top of `target` right now (a
-        // modal/splash overlay, e.g. appended to body as a sibling of #fs-app)?
-        // Ask the browser directly what's really on top at the center of the
-        // screen instead of comparing element sizes against window.innerWidth/
+        // modal/splash overlay)? This can be a sibling of #fs-app appended to
+        // body (mobile), or - in a "desktop preview of mobile" layout, where
+        // #fs-app itself is a small scaled-down phone frame - a position:
+        // absolute descendant of #fs-app that covers it (not just any small
+        // absolutely-positioned badge/tag, which normal page content uses all
+        // the time; only one that covers most of target's own area counts).
+        // Found by asking the browser what's really on top at the screen's
+        // center, then walking up to the outermost such covering ancestor -
+        // rather than comparing element sizes against window.innerWidth/
         // innerHeight, which can disagree with the real layout on some mobile
-        // browsers.
+        // browsers, or checking DOM containment, which misses the descendant case.
+        // Compared against the visible area, not target's full (possibly much
+        // taller, e.g. a scrollable mobile page) scrollHeight.
+        const targetRect = target.getBoundingClientRect();
+        const visibleWidth = Math.min(targetRect.width, window.innerWidth);
+        const visibleHeight = Math.min(targetRect.height, window.innerHeight);
         const topElement = document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2);
-        const isWithinTarget = topElement && (topElement === target || target.contains(topElement));
-
-        if (topElement && !isWithinTarget) {
-          let overlayRoot = topElement;
-          while (
-            overlayRoot.parentElement
-            && overlayRoot.parentElement !== document.body
-            && overlayRoot.parentElement !== document.documentElement
-          ) {
-            overlayRoot = overlayRoot.parentElement;
+        let overlayRoot = null;
+        let el = topElement;
+        while (el && el !== document.documentElement) {
+          const cs = getComputedStyle(el);
+          if (cs.position === 'fixed' || cs.position === 'absolute') {
+            const rect = el.getBoundingClientRect();
+            const coversTarget = rect.width >= visibleWidth * 0.6 && rect.height >= visibleHeight * 0.5;
+            if (coversTarget) overlayRoot = el;
           }
+          if (el === document.body) break;
+          el = el.parentElement;
+        }
+
+        if (overlayRoot && overlayRoot !== target) {
           const rect = overlayRoot.getBoundingClientRect();
           return window.html2canvas(document.body, {
             useCORS: true,
