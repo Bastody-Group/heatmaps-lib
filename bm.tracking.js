@@ -1,4 +1,4 @@
-const BM_TRACKING_VERSION = '1.0.4';
+const BM_TRACKING_VERSION = '1.0.5';
 
 const BM_TRACKING_ENDPOINT = 'https://siwvatcsucacrugbqmhh.supabase.co/functions/v1/heatmap-track';
 
@@ -574,7 +574,7 @@ class HeatmapOverlay {
   captureScreenshot() {
     const target = document.querySelector('#fs-app') || document.body;
     const targetSelector = target.id ? `#${target.id}` : 'body';
-    const fullWidth = target.scrollWidth;
+    const fullWidth = Math.round(target.getBoundingClientRect().width);
     const fullHeight = target.scrollHeight;
     this.updateStatus('Capturing screenshot...');
 
