@@ -1,4 +1,4 @@
-const BM_TRACKING_VERSION = '1.0.7';
+const BM_TRACKING_VERSION = '1.0.8';
 
 const BM_TRACKING_ENDPOINT = 'https://siwvatcsucacrugbqmhh.supabase.co/functions/v1/heatmap-track';
 
@@ -599,47 +599,36 @@ class HeatmapOverlay {
     this.loadHtml2Canvas()
       .then(() => this.waitForContentReady(target))
       .then(() => {
-        const viewportWidth = window.innerWidth;
-        const viewportHeight = window.innerHeight;
-
-        // If a modal/splash/welcome overlay currently covers the (real, current)
-        // viewport, there's nothing meaningful to "expand" - the respondent can't
-        // see or interact with anything past it yet. Capture exactly what's on
-        // screen right now instead of stretching the page and distorting the
-        // overlay (which relies on the viewport's real size for its own layout).
-        // Real mobile browsers can report window.innerHeight smaller than a
-        // 100lvh-styled overlay's actual rendered height (address bar show/hide),
-        // so the height check here is deliberately generous - only the width
-        // needs to line up closely.
-        let blockingOverlay = null;
-        Array.from(document.body.querySelectorAll('*')).some(el => {
-          const cs = getComputedStyle(el);
-          if (cs.position !== 'fixed' && cs.position !== 'absolute') return false;
-          if (cs.display === 'none' || cs.visibility === 'hidden' || parseFloat(cs.opacity) === 0) return false;
-          const rect = el.getBoundingClientRect();
-          const matches = rect.width >= viewportWidth * 0.85 && rect.width <= viewportWidth * 1.15
-            && rect.height >= viewportHeight * 0.4 && rect.height <= viewportHeight * 2
-            && Math.abs(rect.top) <= 20 && Math.abs(rect.left) <= 20;
-          if (matches) blockingOverlay = rect;
-          return matches;
-        });
-
         this.updateStatus('Capturing screenshot...');
 
-        if (blockingOverlay) {
-          // The overlay may be a sibling of target (e.g. appended to body,
-          // covering it), not a descendant - capture body so it's included.
-          // Crop to the overlay's own measured rect (not window.innerWidth/
-          // innerHeight) so it's correct even if those don't quite agree.
+        // Is something else actually rendered on top of `target` right now (a
+        // modal/splash overlay, e.g. appended to body as a sibling of #fs-app)?
+        // Ask the browser directly what's really on top at the center of the
+        // screen instead of comparing element sizes against window.innerWidth/
+        // innerHeight, which can disagree with the real layout on some mobile
+        // browsers.
+        const topElement = document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2);
+        const isWithinTarget = topElement && (topElement === target || target.contains(topElement));
+
+        if (topElement && !isWithinTarget) {
+          let overlayRoot = topElement;
+          while (
+            overlayRoot.parentElement
+            && overlayRoot.parentElement !== document.body
+            && overlayRoot.parentElement !== document.documentElement
+          ) {
+            overlayRoot = overlayRoot.parentElement;
+          }
+          const rect = overlayRoot.getBoundingClientRect();
           return window.html2canvas(document.body, {
             useCORS: true,
             allowTaint: true,
-            x: Math.round(blockingOverlay.left),
-            y: Math.round(blockingOverlay.top),
-            width: Math.round(blockingOverlay.width),
-            height: Math.round(blockingOverlay.height),
-            windowWidth: viewportWidth,
-            windowHeight: viewportHeight,
+            x: Math.round(rect.left),
+            y: Math.round(rect.top),
+            width: Math.round(rect.width),
+            height: Math.round(rect.height),
+            windowWidth: window.innerWidth,
+            windowHeight: window.innerHeight,
           });
         }
 
