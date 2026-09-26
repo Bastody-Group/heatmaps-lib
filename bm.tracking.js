@@ -1,4 +1,4 @@
-const BM_TRACKING_VERSION = '1.0.0';
+const BM_TRACKING_VERSION = '1.0.1';
 
 const BM_TRACKING_ENDPOINT = 'https://siwvatcsucacrugbqmhh.supabase.co/functions/v1/heatmap-track';
 
@@ -14,6 +14,12 @@ function detectMainContents() {
     alert('BM Tracking: #fs-app element not found on this page.');
   }
   return document.body;
+}
+
+function isLocalEnvironment() {
+  if (window.BM_ALLOW_LOCAL_SUBMIT) return false;
+  const { protocol, hostname } = window.location;
+  return protocol === 'file:' || hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '' || hostname === '[::1]';
 }
 
 const DEVICE_BREAKPOINTS = { phone: 560, tablet: 1080 };
@@ -199,6 +205,11 @@ class ClickScrollTracker {
 
   submit() {
     if (this.submitted) return Promise.resolve({ success: false, reason: 'already-submitted' });
+
+    if (isLocalEnvironment()) {
+      console.warn('ClickScrollTracker: local environment detected, submit() skipped');
+      return Promise.resolve({ success: false, reason: 'local-environment' });
+    }
 
     if (!this.endpoint) {
       console.warn('ClickScrollTracker: no endpoint configured, submit() skipped');
