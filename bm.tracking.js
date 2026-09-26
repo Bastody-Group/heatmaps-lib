@@ -1,4 +1,4 @@
-const BM_TRACKING_VERSION = '1.0.9';
+const BM_TRACKING_VERSION = '1.0.10';
 
 const BM_TRACKING_ENDPOINT = 'https://siwvatcsucacrugbqmhh.supabase.co/functions/v1/heatmap-track';
 
@@ -740,6 +740,34 @@ class HeatmapOverlay {
     if (pageLabel) pageLabel.textContent = this.currentPage;
   }
 
+  isElementHidden(element) {
+    const rect = element.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) return true;
+    const style = getComputedStyle(element);
+    return style.display === 'none' || style.visibility === 'hidden';
+  }
+
+  // When the exact element can't be found (e.g. a dropdown item, present only
+  // while the dropdown was open at record time), check whether the nearest
+  // ANCESTOR that still exists is currently hidden - if so, this belongs to a
+  // collapsed/closed section right now and shouldn't get a fallback point
+  // (unlike genuinely dynamic content whose visible container just no longer
+  // has this specific child).
+  isWithinHiddenAncestor(selector) {
+    const segments = selector.split(' > ');
+    for (let i = segments.length - 1; i > 0; i--) {
+      const prefix = segments.slice(0, i).join(' > ');
+      let ancestor;
+      try {
+        ancestor = document.querySelector(prefix);
+      } catch (error) {
+        ancestor = null;
+      }
+      if (ancestor) return this.isElementHidden(ancestor);
+    }
+    return false;
+  }
+
   collectClickItems(page) {
     const items = [];
 
@@ -757,8 +785,9 @@ class HeatmapOverlay {
 
         if (element === document.documentElement || element === document.body) element = null;
 
-        const rect = element ? element.getBoundingClientRect() : null;
-        const isHidden = rect && rect.width === 0 && rect.height === 0;
+        const isHidden = element
+          ? this.isElementHidden(element)
+          : this.isWithinHiddenAncestor(item.selector);
 
         items.push({ item, element: isHidden ? null : element, skipFallback: isHidden, recordIndex });
       });
