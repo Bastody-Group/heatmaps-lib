@@ -1,4 +1,4 @@
-const BM_TRACKING_VERSION = '1.0.6';
+const BM_TRACKING_VERSION = '1.0.7';
 
 const BM_TRACKING_ENDPOINT = 'https://siwvatcsucacrugbqmhh.supabase.co/functions/v1/heatmap-track';
 
@@ -607,28 +607,37 @@ class HeatmapOverlay {
         // see or interact with anything past it yet. Capture exactly what's on
         // screen right now instead of stretching the page and distorting the
         // overlay (which relies on the viewport's real size for its own layout).
-        const hasBlockingOverlay = Array.from(document.body.querySelectorAll('*')).some(el => {
+        // Real mobile browsers can report window.innerHeight smaller than a
+        // 100lvh-styled overlay's actual rendered height (address bar show/hide),
+        // so the height check here is deliberately generous - only the width
+        // needs to line up closely.
+        let blockingOverlay = null;
+        Array.from(document.body.querySelectorAll('*')).some(el => {
           const cs = getComputedStyle(el);
           if (cs.position !== 'fixed' && cs.position !== 'absolute') return false;
           if (cs.display === 'none' || cs.visibility === 'hidden' || parseFloat(cs.opacity) === 0) return false;
           const rect = el.getBoundingClientRect();
-          return rect.width >= viewportWidth * 0.9 && rect.width <= viewportWidth * 1.1
-            && rect.height >= viewportHeight * 0.9 && rect.height <= viewportHeight * 1.1
-            && Math.abs(rect.top) <= 5 && Math.abs(rect.left) <= 5;
+          const matches = rect.width >= viewportWidth * 0.85 && rect.width <= viewportWidth * 1.15
+            && rect.height >= viewportHeight * 0.4 && rect.height <= viewportHeight * 2
+            && Math.abs(rect.top) <= 20 && Math.abs(rect.left) <= 20;
+          if (matches) blockingOverlay = rect;
+          return matches;
         });
 
         this.updateStatus('Capturing screenshot...');
 
-        if (hasBlockingOverlay) {
+        if (blockingOverlay) {
           // The overlay may be a sibling of target (e.g. appended to body,
           // covering it), not a descendant - capture body so it's included.
-          // Constrain to the real viewport size, since body's own scrollWidth/
-          // scrollHeight (the underlying page) is otherwise not what's on screen.
+          // Crop to the overlay's own measured rect (not window.innerWidth/
+          // innerHeight) so it's correct even if those don't quite agree.
           return window.html2canvas(document.body, {
             useCORS: true,
             allowTaint: true,
-            width: viewportWidth,
-            height: viewportHeight,
+            x: Math.round(blockingOverlay.left),
+            y: Math.round(blockingOverlay.top),
+            width: Math.round(blockingOverlay.width),
+            height: Math.round(blockingOverlay.height),
             windowWidth: viewportWidth,
             windowHeight: viewportHeight,
           });
