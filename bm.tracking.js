@@ -615,7 +615,14 @@ class HeatmapOverlay {
   }
 
   pointParentFor(element) {
-    const parent = NON_CONTAINER_TAGS.includes(element.tagName) ? (element.parentElement || this.container) : element;
+    let parent = element;
+
+    while (
+      (parent.namespaceURI === 'http://www.w3.org/2000/svg' || NON_CONTAINER_TAGS.includes(parent.tagName))
+      && parent.parentElement
+    ) {
+      parent = parent.parentElement;
+    }
 
     if (getComputedStyle(parent).position === 'static') {
       parent.style.position = 'relative';
