@@ -1,4 +1,4 @@
-const BM_TRACKING_VERSION = '1.0.3';
+const BM_TRACKING_VERSION = '1.0.4';
 
 const BM_TRACKING_ENDPOINT = 'https://siwvatcsucacrugbqmhh.supabase.co/functions/v1/heatmap-track';
 
@@ -573,10 +573,35 @@ class HeatmapOverlay {
 
   captureScreenshot() {
     const target = document.querySelector('#fs-app') || document.body;
+    const targetSelector = target.id ? `#${target.id}` : 'body';
+    const fullWidth = target.scrollWidth;
+    const fullHeight = target.scrollHeight;
     this.updateStatus('Capturing screenshot...');
 
     this.loadHtml2Canvas()
-      .then(() => window.html2canvas(target, { useCORS: true, allowTaint: true }))
+      .then(() => window.html2canvas(target, {
+        useCORS: true,
+        allowTaint: true,
+        width: fullWidth,
+        height: fullHeight,
+        windowWidth: fullWidth,
+        windowHeight: fullHeight,
+        onclone: (clonedDoc) => {
+          const clonedTarget = clonedDoc.querySelector(targetSelector) || clonedDoc.body;
+          clonedTarget.style.position = 'static';
+          clonedTarget.style.inset = 'auto';
+          clonedTarget.style.top = 'auto';
+          clonedTarget.style.left = 'auto';
+          clonedTarget.style.width = `${fullWidth}px`;
+          clonedTarget.style.height = `${fullHeight}px`;
+          clonedTarget.style.maxHeight = 'none';
+          clonedTarget.style.overflow = 'visible';
+          clonedDoc.documentElement.style.height = 'auto';
+          clonedDoc.documentElement.style.overflow = 'visible';
+          clonedDoc.body.style.height = 'auto';
+          clonedDoc.body.style.overflow = 'visible';
+        },
+      }))
       .then(canvas => new Promise(resolve => canvas.toBlob(resolve, 'image/png')))
       .then(blob => {
         const url = URL.createObjectURL(blob);
