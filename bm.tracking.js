@@ -1,4 +1,4 @@
-const BM_TRACKING_VERSION = '1.0.5';
+const BM_TRACKING_VERSION = '1.0.6';
 
 const BM_TRACKING_ENDPOINT = 'https://siwvatcsucacrugbqmhh.supabase.co/functions/v1/heatmap-track';
 
@@ -571,37 +571,100 @@ class HeatmapOverlay {
     return this.html2canvasPromise;
   }
 
+  waitForContentReady(target) {
+    const imgPromises = Array.from(target.querySelectorAll('img')).map(img => {
+      if (img.complete) return Promise.resolve();
+      return new Promise(resolve => {
+        img.addEventListener('load', resolve, { once: true });
+        img.addEventListener('error', resolve, { once: true });
+      });
+    });
+    const fontsReady = document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve();
+    return Promise.all([fontsReady, ...imgPromises]);
+  }
+
   captureScreenshot() {
     const target = document.querySelector('#fs-app') || document.body;
     const targetSelector = target.id ? `#${target.id}` : 'body';
-    const fullWidth = Math.round(target.getBoundingClientRect().width);
-    const fullHeight = target.scrollHeight;
-    this.updateStatus('Capturing screenshot...');
+    this.updateStatus('Preparing screenshot...');
+
+    // Hide our own floating UI so it never ends up in the captured image
+    // (fixed-position elements can render based on viewport overlap, not just
+    // DOM containment, so this must be hidden regardless of which target/
+    // branch below actually does the capturing).
+    const ownUi = [this.panel, this.tooltip].filter(Boolean);
+    const restoreVisibility = ownUi.map(el => [el, el.style.visibility]);
+    ownUi.forEach(el => { el.style.visibility = 'hidden'; });
 
     this.loadHtml2Canvas()
-      .then(() => window.html2canvas(target, {
-        useCORS: true,
-        allowTaint: true,
-        width: fullWidth,
-        height: fullHeight,
-        windowWidth: fullWidth,
-        windowHeight: fullHeight,
-        onclone: (clonedDoc) => {
-          const clonedTarget = clonedDoc.querySelector(targetSelector) || clonedDoc.body;
-          clonedTarget.style.position = 'static';
-          clonedTarget.style.inset = 'auto';
-          clonedTarget.style.top = 'auto';
-          clonedTarget.style.left = 'auto';
-          clonedTarget.style.width = `${fullWidth}px`;
-          clonedTarget.style.height = `${fullHeight}px`;
-          clonedTarget.style.maxHeight = 'none';
-          clonedTarget.style.overflow = 'visible';
-          clonedDoc.documentElement.style.height = 'auto';
-          clonedDoc.documentElement.style.overflow = 'visible';
-          clonedDoc.body.style.height = 'auto';
-          clonedDoc.body.style.overflow = 'visible';
-        },
-      }))
+      .then(() => this.waitForContentReady(target))
+      .then(() => {
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+
+        // If a modal/splash/welcome overlay currently covers the (real, current)
+        // viewport, there's nothing meaningful to "expand" - the respondent can't
+        // see or interact with anything past it yet. Capture exactly what's on
+        // screen right now instead of stretching the page and distorting the
+        // overlay (which relies on the viewport's real size for its own layout).
+        const hasBlockingOverlay = Array.from(document.body.querySelectorAll('*')).some(el => {
+          const cs = getComputedStyle(el);
+          if (cs.position !== 'fixed' && cs.position !== 'absolute') return false;
+          if (cs.display === 'none' || cs.visibility === 'hidden' || parseFloat(cs.opacity) === 0) return false;
+          const rect = el.getBoundingClientRect();
+          return rect.width >= viewportWidth * 0.9 && rect.width <= viewportWidth * 1.1
+            && rect.height >= viewportHeight * 0.9 && rect.height <= viewportHeight * 1.1
+            && Math.abs(rect.top) <= 5 && Math.abs(rect.left) <= 5;
+        });
+
+        this.updateStatus('Capturing screenshot...');
+
+        if (hasBlockingOverlay) {
+          // The overlay may be a sibling of target (e.g. appended to body,
+          // covering it), not a descendant - capture body so it's included.
+          // Constrain to the real viewport size, since body's own scrollWidth/
+          // scrollHeight (the underlying page) is otherwise not what's on screen.
+          return window.html2canvas(document.body, {
+            useCORS: true,
+            allowTaint: true,
+            width: viewportWidth,
+            height: viewportHeight,
+            windowWidth: viewportWidth,
+            windowHeight: viewportHeight,
+          });
+        }
+
+        const fullWidth = Math.round(target.getBoundingClientRect().width);
+        const fullHeight = target.scrollHeight;
+        return window.html2canvas(target, {
+          useCORS: true,
+          allowTaint: true,
+          width: fullWidth,
+          height: fullHeight,
+          windowWidth: fullWidth,
+          windowHeight: fullHeight,
+          onclone: (clonedDoc) => {
+            const clonedTarget = clonedDoc.querySelector(targetSelector) || clonedDoc.body;
+            // 'relative' (not 'static') so any position:absolute descendant keeps
+            // the same containing block it had before, just no longer viewport-pinned.
+            clonedTarget.style.position = 'relative';
+            clonedTarget.style.inset = 'auto';
+            clonedTarget.style.top = 'auto';
+            clonedTarget.style.left = 'auto';
+            clonedTarget.style.width = `${fullWidth}px`;
+            clonedTarget.style.height = `${fullHeight}px`;
+            clonedTarget.style.maxHeight = 'none';
+            clonedTarget.style.overflow = 'visible';
+            clonedDoc.documentElement.style.height = 'auto';
+            clonedDoc.documentElement.style.overflow = 'visible';
+            clonedDoc.body.style.height = 'auto';
+            clonedDoc.body.style.overflow = 'visible';
+          },
+        });
+      })
+      .finally(() => {
+        restoreVisibility.forEach(([el, value]) => { el.style.visibility = value; });
+      })
       .then(canvas => new Promise(resolve => canvas.toBlob(resolve, 'image/png')))
       .then(blob => {
         const url = URL.createObjectURL(blob);
