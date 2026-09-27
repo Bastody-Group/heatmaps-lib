@@ -1,4 +1,4 @@
-const BM_TRACKING_VERSION = '1.0.11';
+const BM_TRACKING_VERSION = '1.0.12';
 
 const BM_TRACKING_ENDPOINT = 'https://siwvatcsucacrugbqmhh.supabase.co/functions/v1/heatmap-track';
 
@@ -415,10 +415,19 @@ class HeatmapOverlay {
       this.resizeObserver.observe(this.container);
     }
 
+    // Click points are appended into the page's own elements (not the overlay),
+    // so adding/removing them is itself a mutation - ignore those, or every
+    // render would trigger the next one.
+    const isOwnPoint = node => node instanceof Element && node.classList.contains('bm-hm-point');
+
     let mutationRenderTimeout = null;
     this.mutationObserver = new MutationObserver((mutations) => {
       const isRelevant = mutations.some(m => {
         if (this.overlayRoot.contains(m.target)) return false;
+        if (m.type === 'childList') {
+          const nodes = [...m.addedNodes, ...m.removedNodes];
+          if (nodes.length && nodes.every(isOwnPoint)) return false;
+        }
         if (m.type === 'attributes' && m.attributeName === 'style') return false;
         if (m.target instanceof Element && m.target.closest('.swiper')) return false;
         return true;
@@ -840,9 +849,12 @@ class HeatmapOverlay {
   }
 
   renderClickHeatmap() {
-    this.clearClickPoints();
-    this.currentPoints = [];
-    if (!this.state.click) return;
+    if (!this.state.click) {
+      this.clearClickPoints();
+      this.currentPoints = [];
+      this.lastPlacementsKey = null;
+      return;
+    }
 
     const CLUSTER_RADIUS = 24;
     const placements = this.collectClickItems(this.currentPage)
@@ -858,6 +870,24 @@ class HeatmapOverlay {
     });
 
     const hottest = Math.max(CLICK_HOT_THRESHOLD, ...placements.map(p => p.clusterClicks));
+
+    // Unrelated page updates (timers, counters, ...) re-trigger render() - leave
+    // the points alone unless where/how they'd be drawn actually changed,
+    // otherwise they visibly flicker on every such update.
+    const parents = placements.map(p => p.parent);
+    const key = placements
+      .map(p => `${Math.round(p.left)},${Math.round(p.top)},${p.clusterClicks}`)
+      .join('|') + `#${hottest}`;
+    const unchanged = key === this.lastPlacementsKey
+      && parents.length === (this.lastPlacementParents || []).length
+      && parents.every((parent, i) => parent === this.lastPlacementParents[i])
+      && this.pointElements.every(el => el.isConnected);
+    if (unchanged) return;
+
+    this.clearClickPoints();
+    this.currentPoints = [];
+    this.lastPlacementsKey = key;
+    this.lastPlacementParents = parents;
     placements.forEach(placement => this.placeClickPoint(placement, hottest));
   }
 
