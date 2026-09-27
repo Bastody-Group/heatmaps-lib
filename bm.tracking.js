@@ -1,4 +1,4 @@
-const BM_TRACKING_VERSION = '1.0.12';
+const BM_TRACKING_VERSION = '1.0.13';
 
 const BM_TRACKING_ENDPOINT = 'https://siwvatcsucacrugbqmhh.supabase.co/functions/v1/heatmap-track';
 
@@ -50,12 +50,21 @@ function classifyDevice(width) {
 }
 
 const CLICK_HOT_THRESHOLD = 20;
+const CLICK_MERGE_RADIUS = 10;
 
 
 window.BM_SET_PAGE = function bmSetPage(page) {
   window.MOCKUP_PAGE = page;
   document.dispatchEvent(new CustomEvent('mockup:page-change', { detail: page }));
 };
+
+// FullScreen.js fires FS-end once its welcome screen is dismissed - tracking
+// starts only then (every mockup uses FullScreen). Listened for at load time so
+// it's never missed, whenever the tracker is created.
+let welcomeScreenDone = false;
+document.addEventListener('FS-end', () => {
+  welcomeScreenDone = true;
+});
 
 document.addEventListener('bm:page', (event) => {
   window.BM_SET_PAGE(event.detail);
@@ -96,6 +105,7 @@ class ClickScrollTracker {
 
     this.calculateScrollPixels();
     document.addEventListener('mockup:page-change', () => this.calculateScrollPixels());
+    document.addEventListener('FS-end', () => this.calculateScrollPixels());
 
     document.addEventListener('click', this.handleClick.bind(this), true);
   }
@@ -104,10 +114,10 @@ class ClickScrollTracker {
     return window.MOCKUP_PAGE || 'home';
   }
 
-  // The mockup reports its first page (bm:page / BM_SET_PAGE) only after the
-  // welcome screen is dismissed - nothing before that should be recorded.
+  // Nothing is recorded while the welcome screen is up - only after FS-end.
+  // Until the mockup reports a page via bm:page, data goes under 'home'.
   isTrackingActive() {
-    return Boolean(window.MOCKUP_PAGE);
+    return welcomeScreenDone;
   }
 
   calculateScrollPixels(target) {
@@ -154,16 +164,16 @@ class ClickScrollTracker {
 
     if (!this.click[page]) this.click[page] = [];
 
-    const existing = this.click[page].find(item => item.selector === selector);
+    // Only repeat clicks on (almost) the same spot of the same element are
+    // merged - clicks elsewhere on it keep their own position instead of
+    // overwriting the previous one.
+    const existing = this.click[page].find(item => (
+      item.selector === selector
+      && Math.hypot(item.xPx - x, item.yPx - y) <= CLICK_MERGE_RADIUS
+    ));
 
     if (existing) {
       existing.clicks += 1;
-      existing.xPx = x;
-      existing.yPx = y;
-      existing.x = `${((x / rect.width) * 100).toFixed(2)}%`;
-      existing.y = `${((y / rect.height) * 100).toFixed(2)}%`;
-      existing.absXPct = absXPct;
-      existing.absYPct = absYPct;
     } else {
       this.click[page].push({
         selector,
