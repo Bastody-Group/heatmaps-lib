@@ -1,4 +1,4 @@
-const BM_TRACKING_VERSION = '1.0.13';
+const BM_TRACKING_VERSION = '1.0.14';
 
 const BM_TRACKING_ENDPOINT = 'https://siwvatcsucacrugbqmhh.supabase.co/functions/v1/heatmap-track';
 
@@ -417,6 +417,14 @@ class HeatmapOverlay {
       }, 50);
     });
 
+    // FullScreen resets #fs-app's welcome-time styles right before FS-end.
+    document.addEventListener('FS-end', () => {
+      setTimeout(() => {
+        this.resizeOverlay();
+        this.render();
+      }, 50);
+    });
+
     if (window.ResizeObserver) {
       this.resizeObserver = new ResizeObserver(() => {
         this.resizeOverlay();
@@ -780,6 +788,13 @@ class HeatmapOverlay {
     if (pageLabel) pageLabel.textContent = this.currentPage;
   }
 
+  // Nothing is ever recorded before FS-end (see isTrackingActive), so nothing
+  // is drawn over the welcome screen either - on desktop "mobile only" mode
+  // FullScreen mounts it inside #fs-app, right under our overlay.
+  isShowingData() {
+    return welcomeScreenDone;
+  }
+
   isElementHidden(element) {
     const rect = element.getBoundingClientRect();
     if (rect.width === 0 && rect.height === 0) return true;
@@ -859,7 +874,7 @@ class HeatmapOverlay {
   }
 
   renderClickHeatmap() {
-    if (!this.state.click) {
+    if (!this.state.click || !this.isShowingData()) {
       this.clearClickPoints();
       this.currentPoints = [];
       this.lastPlacementsKey = null;
@@ -996,7 +1011,7 @@ class HeatmapOverlay {
   }
 
   renderScrollmap() {
-    if (!this.state.scroll) {
+    if (!this.state.scroll || !this.isShowingData()) {
       this.scrollLayer.style.background = 'none';
       return;
     }
