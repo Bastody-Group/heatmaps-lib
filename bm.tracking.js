@@ -1,4 +1,4 @@
-const BM_TRACKING_VERSION = '1.0.10';
+const BM_TRACKING_VERSION = '1.0.11';
 
 const BM_TRACKING_ENDPOINT = 'https://siwvatcsucacrugbqmhh.supabase.co/functions/v1/heatmap-track';
 
@@ -104,7 +104,15 @@ class ClickScrollTracker {
     return window.MOCKUP_PAGE || 'home';
   }
 
+  // The mockup reports its first page (bm:page / BM_SET_PAGE) only after the
+  // welcome screen is dismissed - nothing before that should be recorded.
+  isTrackingActive() {
+    return Boolean(window.MOCKUP_PAGE);
+  }
+
   calculateScrollPixels(target) {
+    if (!this.isTrackingActive()) return this.scroll;
+
     const scrollTop = target ? target.scrollTop : (window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0);
     const clientHeight = target ? target.clientHeight : (window.innerHeight || document.documentElement.clientHeight || document.body.clientHeight);
     const pixelsScrolled = scrollTop + clientHeight;
@@ -124,6 +132,7 @@ class ClickScrollTracker {
   }
 
   handleClick(event) {
+    if (!this.isTrackingActive()) return;
     if (!(event.target instanceof Element)) return;
     if (event.target === document.documentElement || event.target === document.body) return;
 
@@ -361,10 +370,22 @@ class HeatmapOverlay {
     this.resizeOverlay();
   }
 
+  // The overlay lives inside the container, so its own (absolutely positioned)
+  // size counts towards container.scrollHeight - collapse it before measuring,
+  // otherwise the height can only ever grow and leaves a blank, painted tail
+  // below the real content after the page/layout gets shorter.
+  measureContentHeight() {
+    const previous = this.overlayRoot.style.display;
+    this.overlayRoot.style.display = 'none';
+    const height = this.container.scrollHeight;
+    this.overlayRoot.style.display = previous;
+    return height;
+  }
+
   resizeOverlay() {
     const deviceWidth = DEVICE_WIDTHS[this.device];
     const width = deviceWidth ? parseInt(deviceWidth, 10) : this.container.scrollWidth;
-    const height = this.container.scrollHeight;
+    const height = this.measureContentHeight();
 
     [this.overlayRoot, this.scrollLayer, this.fallbackPointsLayer].forEach(el => {
       el.style.width = `${width}px`;
@@ -882,7 +903,7 @@ class HeatmapOverlay {
 
     if (typeof item.absX === 'number' && typeof item.absY === 'number') {
       const width = this.container.scrollWidth;
-      const height = this.container.scrollHeight;
+      const height = this.measureContentHeight();
       if (item.absX < 0 || item.absX > width || item.absY < 0 || item.absY > height) return null;
 
       return {
@@ -946,7 +967,7 @@ class HeatmapOverlay {
       return;
     }
 
-    const totalHeight = this.container.scrollHeight || 1;
+    const totalHeight = this.measureContentHeight() || 1;
     const bands = 40;
     const stops = [];
 
@@ -963,11 +984,11 @@ class HeatmapOverlay {
 
   scrollColor(percent) {
     return interpolateColor(percent, [
-      [0, [220, 40, 40]],
-      [0.25, [240, 140, 40]],
+      [0, [40, 180, 90]],
+      [0.25, [140, 200, 60]],
       [0.5, [230, 210, 40]],
-      [0.75, [140, 200, 60]],
-      [1, [40, 180, 90]],
+      [0.75, [240, 140, 40]],
+      [1, [220, 40, 40]],
     ]);
   }
 }
