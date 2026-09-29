@@ -1,4 +1,4 @@
-const BM_TRACKING_VERSION = '1.0.16';
+const BM_TRACKING_VERSION = '1.0.17';
 
 const BM_TRACKING_ENDPOINT = 'https://siwvatcsucacrugbqmhh.supabase.co/functions/v1/heatmap-track';
 
@@ -405,8 +405,10 @@ class HeatmapOverlay {
   }
 
   resizeOverlay() {
-    const deviceWidth = DEVICE_WIDTHS[this.device];
-    const width = deviceWidth ? parseInt(deviceWidth, 10) : this.container.scrollWidth;
+    // The container's real rendered width - the device's max-width is only an
+    // upper bound (e.g. FullScreen fits #fs-app into a ~390px phone frame even
+    // in tablet mode), and scrollWidth can be inflated by wide carousels.
+    const width = this.container.clientWidth;
     const height = this.measureContentHeight();
 
     [this.overlayRoot, this.scrollLayer, this.fallbackPointsLayer].forEach(el => {
