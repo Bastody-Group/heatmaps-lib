@@ -1,4 +1,4 @@
-const BM_TRACKING_VERSION = '1.0.15';
+const BM_TRACKING_VERSION = '1.0.16';
 
 const BM_TRACKING_ENDPOINT = 'https://siwvatcsucacrugbqmhh.supabase.co/functions/v1/heatmap-track';
 
@@ -269,6 +269,8 @@ class HeatmapOverlay {
     this.state = {
       click: this.urlParams.get('clickmaps') === 'true' || hasDemoData,
       scroll: this.urlParams.get('scrollmaps') === 'true' || hasDemoData,
+      // On unless explicitly turned off, so existing links get it too.
+      scrollPercent: this.urlParams.get('scrollpercent') !== 'false',
     };
 
     const urlDevice = this.urlParams.get('device');
@@ -468,13 +470,21 @@ class HeatmapOverlay {
 
     this.buildTooltip();
     this.container.addEventListener('mousemove', (event) => {
-      this.updateScrollMarker(event);
+      this.lastPointer = { clientX: event.clientX, clientY: event.clientY };
+      this.updateScrollMarker(this.lastPointer);
       this.handleHover(event);
     });
     this.container.addEventListener('mouseleave', () => {
+      this.lastPointer = null;
       this.hideTooltip();
       this.hideScrollMarker();
     });
+
+    // Scrolling moves the content under a still cursor - keep the marker at
+    // the cursor and update its percentage (capture: #fs-app may be the scroller).
+    document.addEventListener('scroll', () => {
+      if (this.lastPointer) this.updateScrollMarker(this.lastPointer);
+    }, true);
   }
 
   buildTooltip() {
@@ -523,8 +533,9 @@ class HeatmapOverlay {
     if (this.tooltip) this.tooltip.style.display = 'none';
   }
 
-  updateScrollMarker(event) {
-    const depths = this.state.scroll && this.isShowingData() ? this.getScrollDepths(this.currentPage) : [];
+  updateScrollMarker(pointer) {
+    const enabled = this.state.scroll && this.state.scrollPercent && this.isShowingData();
+    const depths = enabled ? this.getScrollDepths(this.currentPage) : [];
     if (!depths.length) {
       this.hideScrollMarker();
       return;
@@ -532,7 +543,7 @@ class HeatmapOverlay {
 
     // Same coordinates as renderScrollmap: pixels from the top of the content.
     const containerRect = this.container.getBoundingClientRect();
-    const y = (event.clientY - containerRect.top) + this.container.scrollTop;
+    const y = (pointer.clientY - containerRect.top) + this.container.scrollTop;
     const percent = (depths.filter(depth => depth >= y).length / depths.length) * 100;
 
     this.scrollMarkerLabel.textContent = `${Math.round(percent * 100) / 100}%`;
@@ -589,6 +600,10 @@ class HeatmapOverlay {
           <span>Scroll map</span>
           <div class="bm-hm-switch" data-role="scroll-switch"></div>
         </div>
+        <div class="bm-hm-row">
+          <span>Scroll %</span>
+          <div class="bm-hm-switch" data-role="scroll-percent-switch"></div>
+        </div>
         <div class="bm-hm-device" data-role="device-switch">
           <button type="button" data-device="phone">Phone</button>
           <button type="button" data-device="tablet">Tablet</button>
@@ -614,6 +629,15 @@ class HeatmapOverlay {
       this.clickSwitch.classList.toggle('on', this.state.click);
       this.syncUrlParams();
       this.render();
+    });
+
+    this.scrollPercentSwitch = panel.querySelector('[data-role="scroll-percent-switch"]');
+    this.scrollPercentSwitch.classList.toggle('on', this.state.scrollPercent);
+    this.scrollPercentSwitch.addEventListener('click', () => {
+      this.state.scrollPercent = !this.state.scrollPercent;
+      this.scrollPercentSwitch.classList.toggle('on', this.state.scrollPercent);
+      this.syncUrlParams();
+      if (!this.state.scrollPercent) this.hideScrollMarker();
     });
 
     this.scrollSwitch.addEventListener('click', () => {
@@ -782,6 +806,7 @@ class HeatmapOverlay {
     const params = new URLSearchParams(window.location.search);
     params.set('clickmaps', String(this.state.click));
     params.set('scrollmaps', String(this.state.scroll));
+    params.set('scrollpercent', String(this.state.scrollPercent));
     params.set('device', this.device);
 
     const newUrl = `${window.location.pathname}?${params.toString()}${window.location.hash}`;
