@@ -1,4 +1,4 @@
-const BM_TRACKING_VERSION = '1.0.14';
+const BM_TRACKING_VERSION = '1.0.15';
 
 const BM_TRACKING_ENDPOINT = 'https://siwvatcsucacrugbqmhh.supabase.co/functions/v1/heatmap-track';
 
@@ -372,7 +372,17 @@ class HeatmapOverlay {
     this.fallbackPointsLayer.id = 'bm-heatmap-fallback-points';
     this.fallbackPointsLayer.style.cssText = 'position:absolute; top:0; left:0;';
 
-    this.overlayRoot.append(this.scrollLayer, this.fallbackPointsLayer);
+    // Horizontal line following the cursor, with the share of sessions that
+    // scrolled at least that far.
+    this.scrollMarker = document.createElement('div');
+    this.scrollMarker.id = 'bm-heatmap-scroll-marker';
+    this.scrollMarker.style.cssText = 'position:absolute; left:0; right:0; height:0; border-top:1px dashed rgba(18,21,26,.75); display:none;';
+
+    this.scrollMarkerLabel = document.createElement('div');
+    this.scrollMarkerLabel.style.cssText = 'position:absolute; left:50%; top:0; transform:translate(-50%,-50%); background:rgba(18,21,26,.95); color:#fff; font:600 15px/1 -apple-system,Arial,sans-serif; padding:7px 12px; border-radius:8px; box-shadow:0 4px 14px rgba(0,0,0,.35); white-space:nowrap;';
+    this.scrollMarker.appendChild(this.scrollMarkerLabel);
+
+    this.overlayRoot.append(this.scrollLayer, this.fallbackPointsLayer, this.scrollMarker);
     this.container.appendChild(this.overlayRoot);
 
     this.pointElements = [];
@@ -457,8 +467,14 @@ class HeatmapOverlay {
     this.mutationObserver.observe(this.container, { childList: true, subtree: true, attributes: true });
 
     this.buildTooltip();
-    this.container.addEventListener('mousemove', (event) => this.handleHover(event));
-    this.container.addEventListener('mouseleave', () => this.hideTooltip());
+    this.container.addEventListener('mousemove', (event) => {
+      this.updateScrollMarker(event);
+      this.handleHover(event);
+    });
+    this.container.addEventListener('mouseleave', () => {
+      this.hideTooltip();
+      this.hideScrollMarker();
+    });
   }
 
   buildTooltip() {
@@ -505,6 +521,27 @@ class HeatmapOverlay {
 
   hideTooltip() {
     if (this.tooltip) this.tooltip.style.display = 'none';
+  }
+
+  updateScrollMarker(event) {
+    const depths = this.state.scroll && this.isShowingData() ? this.getScrollDepths(this.currentPage) : [];
+    if (!depths.length) {
+      this.hideScrollMarker();
+      return;
+    }
+
+    // Same coordinates as renderScrollmap: pixels from the top of the content.
+    const containerRect = this.container.getBoundingClientRect();
+    const y = (event.clientY - containerRect.top) + this.container.scrollTop;
+    const percent = (depths.filter(depth => depth >= y).length / depths.length) * 100;
+
+    this.scrollMarkerLabel.textContent = `${Math.round(percent * 100) / 100}%`;
+    this.scrollMarker.style.top = `${y}px`;
+    this.scrollMarker.style.display = 'block';
+  }
+
+  hideScrollMarker() {
+    if (this.scrollMarker) this.scrollMarker.style.display = 'none';
   }
 
   pluralize(count, singular, plural) {
@@ -640,7 +677,7 @@ class HeatmapOverlay {
     // (fixed-position elements can render based on viewport overlap, not just
     // DOM containment, so this must be hidden regardless of which target/
     // branch below actually does the capturing).
-    const ownUi = [this.panel, this.tooltip].filter(Boolean);
+    const ownUi = [this.panel, this.tooltip, this.scrollMarker].filter(Boolean);
     const restoreVisibility = ownUi.map(el => [el, el.style.visibility]);
     ownUi.forEach(el => { el.style.visibility = 'hidden'; });
 
@@ -1013,12 +1050,14 @@ class HeatmapOverlay {
   renderScrollmap() {
     if (!this.state.scroll || !this.isShowingData()) {
       this.scrollLayer.style.background = 'none';
+      this.hideScrollMarker();
       return;
     }
 
     const depths = this.getScrollDepths(this.currentPage);
     if (!depths.length) {
       this.scrollLayer.style.background = 'none';
+      this.hideScrollMarker();
       return;
     }
 
